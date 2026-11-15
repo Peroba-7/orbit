@@ -1,0 +1,29 @@
+services:
+  banco:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: orbit
+      POSTGRES_PASSWORD: ${ORBIT_BANCO_SENHA:?defina ORBIT_BANCO_SENHA no .env}
+      POSTGRES_DB: orbit
+    volumes:
+      - orbit_dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orbit -d orbit"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Sem "ports": o banco só é acessível pela API, não pela rede da máquina.
+
+  api:
+    build: .
+    environment:
+      ORBIT_CHAVE_API: ${ORBIT_CHAVE_API:?defina ORBIT_CHAVE_API no .env}
+      ORBIT_BANCO_URL: postgresql+psycopg://orbit:${ORBIT_BANCO_SENHA}@banco:5432/orbit
+    depends_on:
+      banco:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000" # só acessível a partir do próprio computador
+
+volumes:
+  orbit_dados:
