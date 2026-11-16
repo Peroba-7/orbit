@@ -4,6 +4,7 @@ Nada de senha ou chave dentro do código: tudo vem do ambiente (.env no
 desenvolvimento, variáveis do Docker Compose ou do servidor em produção).
 """
 
+import math
 import os
 
 
@@ -20,3 +21,24 @@ def chave_da_api() -> str | None:
     """
     chave = os.getenv("ORBIT_CHAVE_API", "").strip()
     return chave or None
+
+
+JANELA_PADRAO_HORAS = 24.0
+
+
+def janela_horas() -> float:
+    """Janela de correlação em horas (ORBIT_JANELA_HORAS, padrão 24).
+
+    Aceita fração (ex.: 0.5). Valor inválido, zero, negativo ou infinito gera
+    erro: uma janela errada faria o motor calar ou disparar à toa sem aviso.
+    """
+    bruto = os.getenv("ORBIT_JANELA_HORAS", "").strip()
+    if not bruto:
+        return JANELA_PADRAO_HORAS
+    try:
+        horas = float(bruto)
+    except ValueError:
+        raise ValueError(f"ORBIT_JANELA_HORAS precisa ser um número, veio {bruto!r}") from None
+    if not math.isfinite(horas) or horas <= 0:
+        raise ValueError(f"ORBIT_JANELA_HORAS precisa ser um número positivo, veio {bruto!r}")
+    return horas

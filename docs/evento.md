@@ -20,7 +20,9 @@ fontes diferentes e a correlação (etapa 2) não funciona.
 
 - **`alvo` é o elo da correlação.** "Login suspeito + phishing para o mesmo
   usuário" só é detectável porque as duas fontes escrevem o usuário no `alvo`.
-  Na etapa 2 vamos definir como normalizar (minúsculas, e-mail vs. usuário).
+  O ORBIT normaliza o alvo (sem espaços nas pontas, minúsculas) ao gravar e ao
+  filtrar; veja [correlacao.md](correlacao.md). E-mail vs. nome de usuário
+  ainda não são unificados: a fonte deve mandar sempre a mesma forma.
 - **`ocorrido_em` exige fuso.** Fontes em horários diferentes quebrariam a
   linha do tempo. Tudo é convertido para UTC.
 - **A fonte não escolhe `id` nem `recebido_em`.** Campos extras são recusados.

@@ -9,12 +9,18 @@ CHAVE = "chave-de-teste"
 
 
 @pytest.fixture
-def cliente(monkeypatch):
-    """Cliente de teste com banco em memória novo a cada teste e chave configurada."""
-    monkeypatch.setenv("ORBIT_CHAVE_API", CHAVE)
+def fabrica():
+    """Banco em memória novo a cada teste."""
     motor = criar_motor("sqlite:///:memory:")
     Base.metadata.create_all(motor)
-    fabrica = sessionmaker(bind=motor, expire_on_commit=False)
+    return sessionmaker(bind=motor, expire_on_commit=False)
+
+
+@pytest.fixture
+def cliente(monkeypatch, fabrica):
+    """Cliente de teste usando o banco em memória do teste e chave configurada."""
+    monkeypatch.setenv("ORBIT_CHAVE_API", CHAVE)
+    monkeypatch.delenv("ORBIT_JANELA_HORAS", raising=False)
 
     def sessao_de_teste():
         with fabrica() as sessao:

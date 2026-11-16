@@ -84,3 +84,14 @@ def test_listagem_vem_do_mais_recente_para_o_mais_antigo(cliente, cabecalho, eve
 
 def test_limite_acima_do_maximo_da_422(cliente, cabecalho):
     assert cliente.get("/eventos", params={"limite": 1000}, headers=cabecalho).status_code == 422
+
+
+def test_alvo_e_normalizado_ao_gravar_e_ao_filtrar(cliente, cabecalho, evento_valido):
+    evento_valido["alvo"] = "  Maria@X.com "
+    criado = cliente.post("/eventos", json=evento_valido, headers=cabecalho)
+    assert criado.status_code == 201
+    assert criado.json()["alvo"] == "maria@x.com"
+
+    for filtro in ("maria@x.com", "MARIA@x.COM", " Maria@X.com "):
+        lista = cliente.get("/eventos", params={"alvo": filtro}, headers=cabecalho).json()
+        assert len(lista) == 1, filtro

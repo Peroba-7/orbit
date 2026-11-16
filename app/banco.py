@@ -1,4 +1,4 @@
-"""Conexão com o banco e a tabela de eventos (SQLAlchemy 2.0).
+"""Conexão com o banco e as tabelas de eventos e alertas (SQLAlchemy 2.0).
 
 Esquemas (esquemas.py) descrevem o que trafega pela API; os modelos daqui
 descrevem como o dado fica guardado no banco. São coisas diferentes.
@@ -8,7 +8,15 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Index, String, TypeDecorator, create_engine
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Index,
+    String,
+    TypeDecorator,
+    UniqueConstraint,
+    create_engine,
+)
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -61,6 +69,31 @@ class Evento(Base):
     detalhes: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     ocorrido_em: Mapped[datetime] = mapped_column(DataUTC())
     recebido_em: Mapped[datetime] = mapped_column(DataUTC(), default=lambda: datetime.now(UTC))
+
+
+class Alerta(Base):
+    """Alerta criado pelo motor de correlação (app/correlacao.py).
+
+    `assinatura` é um hash dos ids dos eventos. Junto com regra e alvo, forma
+    uma chave única: o mesmo alerta (mesma regra, alvo e conjunto de eventos)
+    nunca é gravado duas vezes, nem com duas requisições ao mesmo tempo.
+    """
+
+    __tablename__ = "alertas"
+    __table_args__ = (
+        UniqueConstraint("regra", "alvo", "assinatura", name="uq_alertas_regra_alvo_eventos"),
+        Index("ix_alertas_alvo", "alvo"),
+        Index("ix_alertas_criado_em", "criado_em"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    regra: Mapped[str] = mapped_column(String(60))
+    nivel: Mapped[str] = mapped_column(String(10))
+    alvo: Mapped[str] = mapped_column(String(255))
+    resumo: Mapped[str] = mapped_column(String(500))
+    eventos_ids: Mapped[list[int]] = mapped_column(JSON)
+    assinatura: Mapped[str] = mapped_column(String(64))
+    criado_em: Mapped[datetime] = mapped_column(DataUTC(), default=lambda: datetime.now(UTC))
 
 
 def criar_motor(url: str | None = None) -> Engine:

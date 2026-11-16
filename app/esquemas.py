@@ -35,6 +35,15 @@ class Nivel(StrEnum):
 ORDEM_DOS_NIVEIS: list[Nivel] = [Nivel.BAIXO, Nivel.MEDIO, Nivel.ALTO, Nivel.CRITICO]
 
 
+def normalizar_alvo(alvo: str) -> str:
+    """Forma canônica do alvo: sem espaços nas pontas e em minúsculas.
+
+    O alvo é o elo da correlação: "Maria@X.com " e "maria@x.com" precisam ser o
+    mesmo alvo, senão sinais da mesma pessoa nunca se encontram.
+    """
+    return alvo.strip().lower()
+
+
 def niveis_a_partir_de(minimo: Nivel) -> list[Nivel]:
     """Todos os níveis iguais ou acima do mínimo (usado no filtro da listagem)."""
     return ORDEM_DOS_NIVEIS[ORDEM_DOS_NIVEIS.index(minimo) :]
@@ -69,6 +78,11 @@ class EventoEntrada(BaseModel):
             raise ValueError("não pode ficar vazio")
         return valor
 
+    @field_validator("alvo")
+    @classmethod
+    def _alvo_normalizado(cls, valor: str) -> str:
+        return normalizar_alvo(valor)
+
     @field_validator("ocorrido_em")
     @classmethod
     def _exige_fuso(cls, valor: datetime) -> datetime:
@@ -91,3 +105,23 @@ class EventoSaida(EventoEntrada):
 
     id: int
     recebido_em: datetime
+
+
+class AlertaSaida(BaseModel):
+    """Alerta criado pelo motor de correlação (veja docs/correlacao.md)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    regra: str
+    nivel: Nivel
+    alvo: str
+    resumo: str
+    eventos_ids: list[int]
+    criado_em: datetime
+
+
+class AlertaDetalhado(AlertaSaida):
+    """Alerta mais os eventos que o causaram, para explicar o porquê."""
+
+    eventos: list[EventoSaida]

@@ -1,11 +1,21 @@
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.alertas import gravar_alertas_do_evento
 from app.banco import Evento, obter_sessao
-from app.esquemas import EventoEntrada, EventoSaida, Nivel, Origem, niveis_a_partir_de
+from app.config import janela_horas
+from app.esquemas import (
+    EventoEntrada,
+    EventoSaida,
+    Nivel,
+    Origem,
+    niveis_a_partir_de,
+    normalizar_alvo,
+)
 from app.seguranca import exigir_chave
 
 router = APIRouter(prefix="/eventos", tags=["eventos"], dependencies=[Depends(exigir_chave)])
@@ -15,7 +25,10 @@ SessaoDep = Annotated[Session, Depends(obter_sessao)]
 
 @router.post("", response_model=EventoSaida, status_code=status.HTTP_201_CREATED)
 def registrar_evento(entrada: EventoEntrada, sessao: SessaoDep) -> Evento:
-    """Recebe um evento de uma fonte e guarda no banco."""
+    """Recebe um evento de uma fonte, guarda no banco e roda a correlação.
+
+    Os alertas gerados aparecem em GET /alertas.
+    """
     evento = Evento(
         origem=entrada.origem.value,
         tipo=entrada.tipo,
@@ -27,6 +40,7 @@ def registrar_evento(entrada: EventoEntrada, sessao: SessaoDep) -> Evento:
     )
     sessao.add(evento)
     sessao.commit()
+    gravar_alertas_do_evento(sessao, evento, timedelta(hours=janela_horas()))
     return evento
 
 
@@ -43,7 +57,7 @@ def listar_eventos(
     if origem is not None:
         consulta = consulta.where(Evento.origem == origem.value)
     if alvo is not None:
-        consulta = consulta.where(Evento.alvo == alvo)
+        consulta = consulta.where(Evento.alvo == normalizar_alvo(alvo))
     if nivel_minimo is not None:
         niveis = [n.value for n in niveis_a_partir_de(nivel_minimo)]
         consulta = consulta.where(Evento.nivel.in_(niveis))
