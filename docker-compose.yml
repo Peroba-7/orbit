@@ -25,5 +25,17 @@ services:
     ports:
       - "127.0.0.1:8000:8000" # só acessível a partir do próprio computador
 
+  painel:
+    build:
+      context: .
+      dockerfile: Dockerfile.painel
+    environment:
+      ORBIT_API_URL: http://api:8000 # nome do serviço na rede interna do compose
+      ORBIT_CHAVE_API: ${ORBIT_CHAVE_API:?defina ORBIT_CHAVE_API no .env}
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:8501:8501" # painel sem login próprio: só no próprio computador
+
 volumes:
   orbit_dados:

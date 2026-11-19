@@ -2,25 +2,26 @@
 
 Mini-SOC (centro de operações de segurança) próprio: recebe sinais de várias
 fontes de segurança, guarda num formato único, correlaciona sinais do mesmo
-alvo em alertas explicáveis e, nas próximas etapas, mostra o risco numa tela só.
+alvo em alertas explicáveis e mostra tudo num painel web de uma tela só.
 
-> **Estado: etapa 2 de 5 (motor de correlação).** Ainda não tem painel.
+> **Estado: etapa 3 de 5 (painel web).** Ainda sem novas fontes nem IA.
 
 ## Roadmap
 
 1. **Núcleo e banco**: API que recebe e lista eventos (NetSentinel e Anzol).
-2. **Motor de correlação e níveis de risco**: regras fixas geram alertas. ← aqui
-3. Painel web (linha do tempo, filtros).
+2. **Motor de correlação e níveis de risco**: regras fixas geram alertas.
+3. **Painel web**: métricas, alertas, linha do tempo e filtros (só leitura). ← aqui
 4. Novas fontes: honeypot defensivo e scanner de segredos.
 5. IA que explica (e só sobe o risco), relatórios em PDF e alertas.
 
-## Como funciona (etapa 2)
+## Como funciona (etapa 3)
 
 ```
 NetSentinel ─┐                                ┌─> eventos ─┐
 Anzol ───────┼─ POST /eventos (X-API-Key) ─> API            ├─> PostgreSQL
 (futuras) ───┘                                └─> correlação ─> alertas
-                GET /eventos, GET /alertas, GET /alertas/{id} (filtros)
+                                               ^
+     Painel (Streamlit) ── GET /eventos, GET /alertas, GET /alertas/{id}
 ```
 
 - O formato do evento está em [docs/evento.md](docs/evento.md).
@@ -28,6 +29,8 @@ Anzol ───────┼─ POST /eventos (X-API-Key) ─> API            
   [docs/correlacao.md](docs/correlacao.md). Resumo: phishing + login falho no
   mesmo alvo, rajada de eventos graves e múltiplas fontes viram alertas; o
   nível só sobe, nunca desce. Janela padrão de 24 h (`ORBIT_JANELA_HORAS`).
+- O painel só lê a API (não acessa o banco nem altera regras). Detalhes em
+  [docs/painel.md](docs/painel.md).
 
 ## Rodar com Docker
 
@@ -36,7 +39,10 @@ cp .env.example .env      # edite e preencha a chave e a senha
 docker compose up --build
 ```
 
-Documentação interativa: http://127.0.0.1:8000/docs
+- Painel: http://localhost:8501
+- Documentação interativa da API: http://127.0.0.1:8000/docs
+
+Os dois só escutam em `127.0.0.1` (o próprio computador).
 
 ## Rodar sem Docker (SQLite local)
 
@@ -47,6 +53,33 @@ pip install -r requirements-dev.txt
 set ORBIT_CHAVE_API=minha-chave  # Windows (Linux/macOS: export ...)
 uvicorn app.main:app --reload
 ```
+
+Painel, em outro terminal (mesma chave; a API padrão é `http://127.0.0.1:8000`),
+a partir da raiz do repositório:
+
+```bash
+set ORBIT_CHAVE_API=minha-chave
+python -m streamlit run painel/app.py --server.address=127.0.0.1 --browser.gatherUsageStats=false
+```
+
+Use `python -m streamlit` (e não só `streamlit`) para o pacote `painel` ser
+encontrado.
+
+## Dados de demonstração
+
+Envia ~30 eventos **fictícios** (e-mails em `exemplo.com.br`, IPs só das faixas
+reservadas para documentação) que disparam os alertas de exemplo. Pede
+confirmação antes; não use contra um ORBIT de produção.
+
+```bash
+set ORBIT_CHAVE_API=minha-chave
+python scripts/popular_demo.py
+```
+## Painel
+
+![Painel do ORBIT: alertas correlacionados e os eventos que os causaram](docs/painel-alertas.jpeg)
+
+*Dados de demonstração fictícios, gerados por `scripts/popular_demo.py`.*
 
 ## Exemplo de uso
 
@@ -74,10 +107,18 @@ ruff check .
 - **Falha fechada:** sem `ORBIT_CHAVE_API` configurada, a API recusa tudo (503).
 - Chave comparada em tempo constante; segredos só em variáveis de ambiente.
 - Entrada validada: campos extras recusados, tamanhos limitados, datas com fuso.
-- No Docker, o banco não é exposto à rede e a API escuta só em `127.0.0.1`.
-- O contêiner roda sem privilégios de root.
+- No Docker, o banco não é exposto à rede; API e painel escutam só em `127.0.0.1`.
+- Os contêineres rodam sem privilégios de root.
+- O painel só lê; mostra todo texto vindo da API como texto puro (sem HTML nem
+  Markdown), porque o resumo pode conter dados de terceiros. A chave nunca
+  aparece na tela.
 
-## Limites conhecidos (etapa 2)
+## Limites conhecidos (etapa 3)
+
+- **Painel sem login próprio, uso local.** Quem abre o painel vê tudo o que a
+  chave da API permite. Não publique a porta 8501 na rede.
+- As métricas do painel contam o que foi carregado (até 200 por lista), não o
+  banco inteiro; a API ainda não tem endpoint de contagem.
 
 - Uma única chave de API para todas as fontes (sem usuários nem papéis).
 - Tabelas criadas na subida; falta migração (Alembic) para evoluir o banco.
