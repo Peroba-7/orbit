@@ -86,7 +86,7 @@ python scripts/popular_demo.py
 ```bash
 curl -X POST http://127.0.0.1:8000/eventos \
   -H "X-API-Key: minha-chave" -H "Content-Type: application/json" \
-  -d '{"origem":"anzol","tipo":"phishing_detectado","alvo":"maria@empresa.com.br",
+  -d '{"origem":"anzol","tipo":"phishing_detectado","alvo":"maria@exemplo.com.br",
        "nivel":"CRÍTICO","resumo":"E-mail com DMARC falhando."}'
 
 curl -H "X-API-Key: minha-chave" "http://127.0.0.1:8000/eventos?nivel_minimo=ALTO"
@@ -117,7 +117,7 @@ ruff check .
 
 - **Painel sem login próprio, uso local.** Quem abre o painel vê tudo o que a
   chave da API permite. Não publique a porta 8501 na rede.
-- As métricas do painel contam o que foi carregado (até 200 por lista), não o
+- As métricas do painel contam o que foi carregado (até 200 por lista (padrão 100)), não o
   banco inteiro; a API ainda não tem endpoint de contagem.
 
 - Uma única chave de API para todas as fontes (sem usuários nem papéis).
