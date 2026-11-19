@@ -217,3 +217,22 @@ def test_evento_mais_fraco_depois_nao_baixa_o_nivel():
 def test_janela_nao_positiva_e_recusada():
     with pytest.raises(ValueError):
         correlacionar([], timedelta(0))
+
+
+# --- heartbeats ------------------------------------------------------------------
+
+
+def test_heartbeats_ficam_fora_da_correlacao():
+    # Duas fontes e três "graves" no mesmo alvo, mas todos heartbeat: nada dispara.
+    eventos = [
+        ev("netsentinel", "CRÍTICO", 0.0, tipo="heartbeat"),
+        ev("anzol", "CRÍTICO", 0.1, tipo="HeartBeat "),
+        ev("netsentinel", "CRÍTICO", 0.2, tipo="heartbeat"),
+    ]
+    assert correlacionar(eventos, JANELA) == []
+
+
+def test_heartbeat_nao_entra_no_grupo_de_eventos_reais():
+    hb = ev("anzol", "BAIXO", 0.5, tipo="heartbeat")
+    eventos = [ev("netsentinel", "ALTO", 0.0), hb]
+    assert por_regra(correlacionar(eventos, JANELA), REGRA_MULTIPLAS_FONTES) == []

@@ -67,6 +67,11 @@ with st.sidebar:
         "Alvo", max_chars=255, placeholder="maria@exemplo.com.br", key="filtro_alvo",
         help="Valor exato (maiúsculas e espaços nas pontas não importam).",
     )
+    mostrar_heartbeats = st.toggle(
+        "Mostrar heartbeats", value=False, key="filtro_heartbeats",
+        help="Sinais de vida que as fontes enviam para provar que estão no ar. "
+        "Não são eventos de segurança, por isso ficam ocultos por padrão.",
+    )
     limite = st.slider(
         "Limite por lista", 10, dados.LIMITE_MAXIMO, 100, step=10, key="filtro_limite"
     )
@@ -94,6 +99,8 @@ except ErroDaApi as erro:
 
 # Rede de segurança: aplica os mesmos filtros sobre a resposta.
 eventos = dados.filtrar(eventos, **filtros)
+if not mostrar_heartbeats:
+    eventos = dados.sem_heartbeats(eventos)
 alertas = dados.filtrar(alertas, **filtros)
 
 
@@ -105,7 +112,10 @@ with st.container(horizontal=True):
     st.metric("Alertas", numeros["alertas"], border=True)
     st.metric("Alertas críticos", numeros["alertas_criticos"], border=True)
     st.metric("Alvos distintos", numeros["alvos_distintos"], border=True)
-st.caption(f"Contagens sobre o que foi carregado com os filtros (até {limite} por lista).")
+st.caption(
+    f"Contagens sobre o que foi carregado com os filtros (até {limite} por lista)."
+    + ("" if mostrar_heartbeats else " Heartbeats ocultos.")
+)
 
 
 # --- Alertas -----------------------------------------------------------------------------

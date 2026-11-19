@@ -4,14 +4,16 @@ Mini-SOC (centro de operações de segurança) próprio: recebe sinais de vária
 fontes de segurança, guarda num formato único, correlaciona sinais do mesmo
 alvo em alertas explicáveis e mostra tudo num painel web de uma tela só.
 
-> **Estado: etapa 3 de 5 (painel web).** Ainda sem novas fontes nem IA.
+> **Estado: etapa 4 de 5 em andamento.** Parte 1 pronta: regra de saúde das
+> fontes (heartbeat), ainda sem execução automática. Sem novas fontes nem IA.
 
 ## Roadmap
 
 1. **Núcleo e banco**: API que recebe e lista eventos (NetSentinel e Anzol).
 2. **Motor de correlação e níveis de risco**: regras fixas geram alertas.
-3. **Painel web**: métricas, alertas, linha do tempo e filtros (só leitura). ← aqui
-4. Novas fontes: honeypot defensivo e scanner de segredos.
+3. **Painel web**: métricas, alertas, linha do tempo e filtros (só leitura).
+4. Novas fontes: saúde das fontes (heartbeat), honeypot defensivo e scanner
+   de segredos. ← aqui (parte 1: saúde das fontes)
 5. IA que explica (e só sobe o risco), relatórios em PDF e alertas.
 
 ## Como funciona (etapa 3)
@@ -31,6 +33,11 @@ Anzol ───────┼─ POST /eventos (X-API-Key) ─> API            
   nível só sobe, nunca desce. Janela padrão de 24 h (`ORBIT_JANELA_HORAS`).
 - O painel só lê a API (não acessa o banco nem altera regras). Detalhes em
   [docs/painel.md](docs/painel.md).
+- **Saúde das fontes:** cada fonte manda eventos `heartbeat`. Sem sinal há
+  mais de 3 h (`ORBIT_SILENCIO_HORAS`) vira alerta ALTO; regras com mais de 7
+  dias (`ORBIT_DESATUALIZACAO_DIAS`) ou versão desconhecida, MÉDIO. Heartbeats
+  ficam fora da correlação e ocultos no painel por padrão. Detalhes em
+  [docs/saude_fontes.md](docs/saude_fontes.md).
 
 ## Rodar com Docker
 
@@ -67,8 +74,9 @@ encontrado.
 
 ## Dados de demonstração
 
-Envia ~30 eventos **fictícios** (e-mails em `exemplo.com.br`, IPs só das faixas
-reservadas para documentação) que disparam os alertas de exemplo. Pede
+Envia ~35 eventos **fictícios** (e-mails em `exemplo.com.br`, IPs só das faixas
+reservadas para documentação) que disparam os alertas de exemplo, mais
+heartbeats de três sensores fictícios (um ok, um silencioso, um desatualizado). Pede
 confirmação antes; não use contra um ORBIT de produção.
 
 ```bash
@@ -113,7 +121,18 @@ ruff check .
   Markdown), porque o resumo pode conter dados de terceiros. A chave nunca
   aparece na tela.
 
-## Limites conhecidos (etapa 3)
+## Limites conhecidos (etapa 4, parte 1)
+
+- **Saúde das fontes ainda não roda sozinha.** `verificar_saude` (em
+  `app/saude_fontes.py`) existe e está testada, mas nada a chama
+  periodicamente: os alertas de saúde ainda não são gravados nem aparecem em
+  `GET /alertas` ou no painel. Precisa de agendamento, porque uma fonte calada
+  não manda evento que dispare a verificação.
+- Fonte que nunca mandou heartbeat é invisível para a regra; fonte desligada
+  de propósito fica "silenciosa" para sempre (não há cadastro de fontes).
+- O painel esconde heartbeats depois de receber a resposta da API (que não
+  filtra por tipo): com muitos heartbeats, sobram menos eventos reais dentro
+  do limite por lista.
 
 - **Painel sem login próprio, uso local.** Quem abre o painel vê tudo o que a
   chave da API permite. Não publique a porta 8501 na rede.

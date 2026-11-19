@@ -61,6 +61,17 @@ def test_filtrar_por_origem_nao_descarta_alertas():
     assert dados.filtrar(alertas, origem="anzol") == alertas
 
 
+def test_sem_heartbeats_tira_so_os_sinais_de_vida():
+    eventos = [
+        evento(1, "netsentinel", "2026-11-14T10:00:00Z", tipo="heartbeat"),
+        evento(2, "anzol", "2026-11-14T10:00:00Z", tipo=" HeartBeat "),
+        evento(3, "anzol", "2026-11-14T10:00:00Z", tipo="phishing_detectado"),
+        evento(4, "anzol", "2026-11-14T10:00:00Z", tipo=None),
+    ]
+    assert [e["id"] for e in dados.sem_heartbeats(eventos)] == [3, 4]
+    assert dados.sem_heartbeats([]) == []
+
+
 # --- ordenação -------------------------------------------------------------------
 
 

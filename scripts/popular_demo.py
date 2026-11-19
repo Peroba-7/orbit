@@ -1,4 +1,4 @@
-"""Popula o ORBIT com ~30 eventos FICTÍCIOS para demonstrar o painel.
+"""Popula o ORBIT com ~35 eventos FICTÍCIOS para demonstrar o painel.
 
     python scripts/popular_demo.py          # pede confirmação
     python scripts/popular_demo.py --sim    # sem perguntar (ex.: automação)
@@ -12,6 +12,11 @@ Cenários incluídos:
 - maria@exemplo.com.br: phishing (Anzol) e depois login falho / brute force
   (NetSentinel) -> dispara "phishing_mais_login_falho" e "multiplas_fontes";
 - 203.0.113.45: 3 varreduras ALTO em 40 min -> dispara "rajada_de_alertas";
+- heartbeats (sinais de vida) de três sensores fictícios, para a regra de
+  saúde das fontes (app/saude_fontes.py, limites padrão de 3 h e 7 dias):
+  sensor-sede está ok, sensor-filial está SILENCIOSO (último sinal há 8 h) e
+  anzol-gateway está DESATUALIZADO (regras de 20 dias atrás). Heartbeats não
+  entram na correlação: não geram alertas de ataque;
 - o resto: eventos isolados de vários níveis, que não devem gerar alerta.
 
 NÃO rode contra um ORBIT de produção: os eventos ficam gravados de verdade.
@@ -41,6 +46,14 @@ def _ev(
         "ocorrido_em": (agora - timedelta(hours=horas_atras)).isoformat(),
         "detalhes": {"demo": True, **detalhes},
     }
+
+
+def _heartbeat(
+    agora: datetime, horas_atras: float, origem: str, sensor: str, versao_dias_atras: int
+) -> dict[str, Any]:
+    versao = (agora - timedelta(days=versao_dias_atras)).date().isoformat()
+    return _ev(agora, horas_atras, origem, "heartbeat", sensor, "BAIXO",
+               "Sinal de vida do sensor.", versao_regras=versao)
 
 
 def eventos_demo(agora: datetime | None = None) -> list[dict[str, Any]]:
@@ -112,6 +125,11 @@ def eventos_demo(agora: datetime | None = None) -> list[dict[str, Any]]:
             "Certificado autoassinado em impressora de rede."),
         _ev(a, 0.2, "anzol", "spam", "paula@exemplo.com.br", "BAIXO",
             "Promoção genérica."),
+        # Saúde das fontes: heartbeats (sinal de vida + versão das regras).
+        _heartbeat(a, 1.25, "netsentinel", "sensor-sede", versao_dias_atras=1),
+        _heartbeat(a, 0.25, "netsentinel", "sensor-sede", versao_dias_atras=1),  # ok
+        _heartbeat(a, 8, "netsentinel", "sensor-filial", versao_dias_atras=2),  # silencioso
+        _heartbeat(a, 0.1, "anzol", "anzol-gateway", versao_dias_atras=20),  # desatualizado
     ]
 
 

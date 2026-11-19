@@ -5,7 +5,6 @@ evento novo: tudo o que não depende dele já foi avaliado quando os outros
 eventos chegaram.
 """
 
-import hashlib
 from datetime import timedelta
 
 from sqlalchemy import select
@@ -13,13 +12,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.banco import Alerta, Evento
-from app.correlacao import RAJADA_JANELA, AlertaProposto, correlacionar
+from app.correlacao import RAJADA_JANELA, AlertaProposto, assinatura, correlacionar
 
-
-def assinatura(eventos_ids: tuple[int, ...]) -> str:
-    """Hash do conjunto de eventos (ordem não importa), usado contra duplicatas."""
-    texto = ",".join(str(i) for i in sorted(set(eventos_ids)))
-    return hashlib.sha256(texto.encode()).hexdigest()
+__all__ = ["assinatura", "gravar_alertas_do_evento"]
 
 
 def _eventos_proximos(sessao: Session, evento: Evento, janela: timedelta) -> list[Evento]:

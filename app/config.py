@@ -4,8 +4,11 @@ Nada de senha ou chave dentro do código: tudo vem do ambiente (.env no
 desenvolvimento, variáveis do Docker Compose ou do servidor em produção).
 """
 
+import logging
 import math
 import os
+
+log = logging.getLogger(__name__)
 
 
 def url_do_banco() -> str:
@@ -42,3 +45,44 @@ def janela_horas() -> float:
     if not math.isfinite(horas) or horas <= 0:
         raise ValueError(f"ORBIT_JANELA_HORAS precisa ser um número positivo, veio {bruto!r}")
     return horas
+
+
+# Saúde das fontes (app/saude_fontes.py). Ao contrário da janela, valor
+# inválido NÃO impede a API de subir: cai no padrão e fica registrado no log.
+# Errar aqui só muda quando o aviso de sensor parado aparece; parar a API por
+# isso deixaria o ORBIT inteiro cego.
+SILENCIO_PADRAO_HORAS = 3.0
+DESATUALIZACAO_PADRAO_DIAS = 7
+
+
+def _positivo_ou_padrao(nome: str, padrao: float, conversor) -> float:
+    bruto = os.getenv(nome, "").strip()
+    if not bruto:
+        return padrao
+    try:
+        valor = conversor(bruto)
+    except ValueError:
+        valor = None
+    if valor is None or not math.isfinite(valor) or valor <= 0:
+        log.warning("%s inválido (%r): usando o padrão %s", nome, bruto, padrao)
+        return padrao
+    return valor
+
+
+def silencio_horas() -> float:
+    """Horas sem heartbeat até a fonte ser considerada silenciosa (ORBIT_SILENCIO_HORAS).
+
+    Padrão 3. Aceita fração (ex.: 0.5). Inválido, zero ou negativo -> padrão.
+    """
+    return _positivo_ou_padrao("ORBIT_SILENCIO_HORAS", SILENCIO_PADRAO_HORAS, float)
+
+
+def desatualizacao_dias() -> int:
+    """Idade máxima da versão das regras, em dias (ORBIT_DESATUALIZACAO_DIAS).
+
+    Padrão 7. Só número inteiro (a versão é uma data). Inválido, zero ou
+    negativo -> padrão.
+    """
+    return int(
+        _positivo_ou_padrao("ORBIT_DESATUALIZACAO_DIAS", DESATUALIZACAO_PADRAO_DIAS, int)
+    )

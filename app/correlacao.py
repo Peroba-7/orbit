@@ -11,6 +11,7 @@ conjunto de eventos determinístico (o mesmo dado gera sempre o mesmo alerta),
 o que permite evitar duplicatas.
 """
 
+import hashlib
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -25,6 +26,10 @@ from app.esquemas import ORDEM_DOS_NIVEIS, Nivel, Origem, normalizar_alvo
 # TODO: conferir os tipos reais emitidos pelo NetSentinel.
 TIPOS_PHISHING = {"phishing_detectado"}
 TIPOS_LOGIN_FALHO = {"login_falho", "brute_force"}
+
+# Sinais de vida das fontes não são sinais de ataque: ficam fora da correlação
+# (quem olha para eles é app/saude_fontes.py).
+TIPOS_IGNORADOS = {"heartbeat"}
 
 ORIGEM_PHISHING = Origem.ANZOL
 ORIGEM_LOGIN_FALHO = Origem.NETSENTINEL
@@ -59,6 +64,15 @@ class AlertaProposto:
 
 
 # --- Ajudantes ---------------------------------------------------------------
+
+
+def assinatura(eventos_ids: Iterable[int]) -> str:
+    """Hash do conjunto de eventos (ordem não importa), usado contra duplicatas.
+
+    Junto com regra e alvo, identifica um alerta (restrição única no banco).
+    """
+    texto = ",".join(str(i) for i in sorted(set(eventos_ids)))
+    return hashlib.sha256(texto.encode()).hexdigest()
 
 
 def _indice(nivel: str) -> int:
@@ -181,6 +195,7 @@ def correlacionar(
 
     Eventos de alvos diferentes nunca se misturam: o motor agrupa por alvo
     normalizado antes de aplicar as regras. Evento isolado não gera alerta.
+    Heartbeats (TIPOS_IGNORADOS) não entram em regra nenhuma.
     Garantia: o nível de todo alerta é maior ou igual ao maior nível dos seus
     eventos (o motor só sobe o risco, nunca desce).
     """
@@ -189,6 +204,8 @@ def correlacionar(
 
     por_alvo: dict[str, list[EventoCorrelacionavel]] = defaultdict(list)
     for evento in eventos:
+        if _tipo(evento) in TIPOS_IGNORADOS:
+            continue
         por_alvo[normalizar_alvo(evento.alvo)].append(evento)
 
     alertas: dict[tuple[str, str, tuple[int, ...]], AlertaProposto] = {}

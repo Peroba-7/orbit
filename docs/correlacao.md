@@ -42,6 +42,10 @@ janela própria e fixa de 1 h (ver abaixo).
 | `multiplas_fontes` | 2 ou mais origens diferentes dentro da janela | um acima do maior evento (máx. CRÍTICO) |
 | (evento isolado) | nada combina | sem alerta |
 
+Eventos do tipo `heartbeat` (sinal de vida das fontes) **não entram em
+nenhuma regra** (`TIPOS_IGNORADOS`): não são sinal de ataque. Quem cuida
+deles é a regra de saúde das fontes, em [saude_fontes.md](saude_fontes.md).
+
 ### `phishing_mais_login_falho`
 
 O par clássico de roubo de credencial. Exige **origens diferentes de

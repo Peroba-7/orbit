@@ -2,8 +2,10 @@
 
 import ipaddress
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from app.esquemas import EventoEntrada
+from app.saude_fontes import REGRA_DESATUALIZADA, REGRA_SILENCIOSA, verificar_saude
 from scripts.popular_demo import eventos_demo, main
 
 FAIXAS_RESERVADAS = [
@@ -18,9 +20,9 @@ def _e_ip(texto):
         return None
 
 
-def test_cerca_de_30_eventos_validos_de_anzol_e_netsentinel():
+def test_cerca_de_35_eventos_validos_de_anzol_e_netsentinel():
     eventos = eventos_demo()
-    assert 25 <= len(eventos) <= 35
+    assert 30 <= len(eventos) <= 40
     for evento in eventos:
         EventoEntrada.model_validate(evento)  # mesmo molde que a API exige
     assert {e["origem"] for e in eventos} == {"anzol", "netsentinel"}
@@ -75,3 +77,16 @@ def test_entrada_fechada_conta_como_nao(monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", sem_entrada)
     assert main([]) == 1
     assert "Nada foi enviado" in capsys.readouterr().out
+
+
+def test_heartbeats_demo_tem_um_silencioso_e_um_desatualizado():
+    agora = datetime(2026, 11, 14, 12, tzinfo=UTC)
+    eventos = [
+        SimpleNamespace(id=i, **{**e, "ocorrido_em": datetime.fromisoformat(e["ocorrido_em"])})
+        for i, e in enumerate(eventos_demo(agora), start=1)
+    ]
+    alertas = {(a.regra, a.alvo) for a in verificar_saude(eventos, agora)}
+    assert alertas == {
+        (REGRA_SILENCIOSA, "sensor-filial"),
+        (REGRA_DESATUALIZADA, "anzol-gateway"),
+    }

@@ -14,6 +14,9 @@ from typing import Any
 NIVEIS = ["BAIXO", "MÉDIO", "ALTO", "CRÍTICO"]
 ORIGENS = ["netsentinel", "anzol", "honeypot", "scanner_segredos", "logs"]
 LIMITE_MAXIMO = 200
+# Sinal de vida das fontes (app/saude_fontes.py): não é evento de segurança,
+# então fica oculto por padrão para não poluir métricas e linha do tempo.
+TIPO_HEARTBEAT = "heartbeat"
 
 # Cores de fundo/texto de cada nível na tabela (contraste legível nos dois temas).
 CORES_NIVEL = {
@@ -91,6 +94,17 @@ def filtrar(
             continue
         resultado.append(r)
     return resultado
+
+
+def e_heartbeat(registro: Registro) -> bool:
+    """Mesma regra da API: tipo "heartbeat", sem diferenciar maiúsculas nem espaços."""
+    tipo = registro.get("tipo")
+    return isinstance(tipo, str) and tipo.strip().lower() == TIPO_HEARTBEAT
+
+
+def sem_heartbeats(eventos: Iterable[Registro]) -> list[Registro]:
+    """Remove os heartbeats da lista de eventos (filtro local, depois da API)."""
+    return [e for e in eventos if not e_heartbeat(e)]
 
 
 def ler_data(texto: str | None) -> datetime | None:

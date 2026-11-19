@@ -9,10 +9,14 @@ regras.
 
 - **Métricas:** total de eventos, total de alertas, alertas CRÍTICOS e alvos
   distintos. Contam o que foi carregado com os filtros (até o limite).
-- **Filtros (barra lateral):** origem, nível mínimo, alvo e limite (até 200).
+- **Filtros (barra lateral):** origem, nível mínimo, alvo, "Mostrar
+  heartbeats" e limite (até 200).
   Vão para a API, então valem para o banco todo, não só para a tela. O alvo é
   comparado como a API faz (sem espaços nas pontas, minúsculas) e precisa ser
   o valor exato. A origem só filtra eventos: alerta não tem origem própria.
+  Heartbeats (sinal de vida das fontes, veja
+  [saude_fontes.md](saude_fontes.md)) ficam ocultos por padrão. Esse filtro
+  é local, depois da API, então eles ainda ocupam espaço no limite.
 - **Alertas:** do mais grave ao mais recente, com o nível colorido. Ao
   selecionar uma linha, aparecem os eventos que causaram o alerta.
 - **Linha do tempo:** eventos por hora (UTC) e por origem, contados por
