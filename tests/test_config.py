@@ -4,9 +4,11 @@ from app.config import (
     DESATUALIZACAO_PADRAO_DIAS,
     JANELA_PADRAO_HORAS,
     SILENCIO_PADRAO_HORAS,
+    VERIFICACAO_PADRAO_MINUTOS,
     desatualizacao_dias,
     janela_horas,
     silencio_horas,
+    verificacao_minutos,
 )
 
 
@@ -56,3 +58,24 @@ def test_desatualizacao_invalida_cai_no_padrao(monkeypatch, caplog, valor):
     monkeypatch.setenv("ORBIT_DESATUALIZACAO_DIAS", valor)
     assert desatualizacao_dias() == DESATUALIZACAO_PADRAO_DIAS
     assert "ORBIT_DESATUALIZACAO_DIAS" in caplog.text
+
+
+# --- intervalo da verificação de saúde ---------------------------------------------
+
+
+def test_verificacao_padrao_e_5_minutos(monkeypatch):
+    monkeypatch.delenv("ORBIT_VERIFICACAO_MINUTOS", raising=False)
+    assert verificacao_minutos() == VERIFICACAO_PADRAO_MINUTOS == 5
+
+
+@pytest.mark.parametrize(("valor", "esperado"), [("10", 10), (" 0.5 ", 0.5), ("0", 0)])
+def test_verificacao_configuravel_e_zero_desliga(monkeypatch, valor, esperado):
+    monkeypatch.setenv("ORBIT_VERIFICACAO_MINUTOS", valor)
+    assert verificacao_minutos() == esperado
+
+
+@pytest.mark.parametrize("valor", ["-1", "abc", "nan", "inf", "5 min"])
+def test_verificacao_invalida_cai_no_padrao(monkeypatch, caplog, valor):
+    monkeypatch.setenv("ORBIT_VERIFICACAO_MINUTOS", valor)
+    assert verificacao_minutos() == VERIFICACAO_PADRAO_MINUTOS
+    assert "ORBIT_VERIFICACAO_MINUTOS" in caplog.text

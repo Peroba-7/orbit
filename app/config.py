@@ -86,3 +86,27 @@ def desatualizacao_dias() -> int:
     return int(
         _positivo_ou_padrao("ORBIT_DESATUALIZACAO_DIAS", DESATUALIZACAO_PADRAO_DIAS, int)
     )
+
+
+VERIFICACAO_PADRAO_MINUTOS = 5.0
+
+
+def verificacao_minutos() -> float:
+    """Intervalo da verificação de saúde em segundo plano (ORBIT_VERIFICACAO_MINUTOS).
+
+    Padrão 5. Aceita fração (ex.: 0.5). Zero desliga a verificação automática
+    (útil em testes). Inválido, negativo ou infinito -> padrão, com aviso no log.
+    """
+    nome = "ORBIT_VERIFICACAO_MINUTOS"
+    bruto = os.getenv(nome, "").strip()
+    if not bruto:
+        return VERIFICACAO_PADRAO_MINUTOS
+    try:
+        minutos = float(bruto)
+    except ValueError:
+        minutos = -1.0
+    if not math.isfinite(minutos) or minutos < 0:
+        log.warning("%s inválido (%r): usando o padrão %s", nome, bruto,
+                    VERIFICACAO_PADRAO_MINUTOS)
+        return VERIFICACAO_PADRAO_MINUTOS
+    return minutos

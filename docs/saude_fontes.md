@@ -1,4 +1,4 @@
-# Saúde das fontes (etapa 4, parte 1)
+# Saúde das fontes (etapa 4)
 
 Um ORBIT sem alertas pode ser um dia tranquilo **ou um sensor que caiu sem
 ninguém ver**. Do ponto de vista do painel, os dois parecem iguais. Esta regra
@@ -96,36 +96,111 @@ de atraso em atualização de regras.
 - **No painel, heartbeats ficam ocultos por padrão** (opção "Mostrar
   heartbeats" na barra lateral). Veja [painel.md](painel.md).
 - `scripts/popular_demo.py` envia heartbeats fictícios: `sensor-sede` (ok),
-  `sensor-filial` (silencioso) e `anzol-gateway` (desatualizado).
+  `sensor-filial` (silencioso) e `anzol-gateway` (desatualizado). Os alertas
+  de saúde aparecem até um ciclo do agendador depois (5 min, por padrão).
 
-## Uso
+## Execução automática (etapa 4, parte 2)
+
+A regra roda sozinha, dentro da própria API. Na subida (lifespan do FastAPI,
+em [app/main.py](../app/main.py)) nasce uma tarefa asyncio
+([app/agendador.py](../app/agendador.py)) que repete:
+
+1. espera `ORBIT_VERIFICACAO_MINUTOS` (padrão 5);
+2. busca os heartbeats no banco, chama `verificar_saude(eventos, agora)` com a
+   hora atual em UTC e grava só os alertas novos
+   (`verificar_saude_e_gravar` em [app/alertas.py](../app/alertas.py)).
+
+Os alertas gravados são alertas comuns: aparecem em `GET /alertas`,
+`GET /alertas/{id}` (com o heartbeat que os causou) e no painel, com regra
+`fonte_silenciosa` ou `fonte_desatualizada`.
+
+| Variável | Padrão | Aceita |
+|---|---|---|
+| `ORBIT_VERIFICACAO_MINUTOS` | 5 | número ≥ 0, com fração; **0 desliga** |
+
+Inválido (negativo, texto, infinito) cai no padrão com aviso no log. As três
+variáveis da saúde das fontes (`ORBIT_SILENCIO_HORAS`,
+`ORBIT_DESATUALIZACAO_DIAS` e `ORBIT_VERIFICACAO_MINUTOS`) são lidas **uma vez,
+na subida**, para um valor inválido gerar um aviso só e não um por ciclo.
+Mudar exige reiniciar a API.
+
+### Decisões
+
+- **Uma falha não derruba a API.** Qualquer erro numa verificação (banco fora
+  do ar, dado estranho) vai para o log com o traceback e a próxima tentativa
+  acontece no ciclo seguinte. A API continua recebendo eventos.
+- **Primeiro ciclo só depois de um intervalo.** Se a API ficou fora do ar por
+  horas, as fontes não conseguiram mandar heartbeat nesse tempo. Verificar na
+  subida transformaria toda reinicialização numa chuva de alertas de
+  silêncio; esperando um intervalo, quem está vivo tem tempo de se apresentar.
+- **Roda numa thread.** O banco é síncrono; a consulta não trava as
+  requisições.
+- **Desligamento limpo.** Ao desligar, a tarefa é cancelada e aguardada. Se
+  uma verificação estiver no meio, a thread dela termina sozinha (threads não
+  são interrompidas); o que ela gravar segue o mesmo dedupe.
+- **Não varre o histórico inteiro.** A cada ciclo, o banco devolve só o último
+  heartbeat de cada (origem, alvo) e, para cada um, o primeiro heartbeat com a
+  mesma versão das regras (veja abaixo). Uma consulta extra por fonte.
+
+### Dedupe: um alerta por problema, não por ciclo
+
+O dedupe é o mesmo das outras regras: (regra, alvo, assinatura dos eventos),
+com restrição única no banco. O que define a assinatura é **qual heartbeat o
+alerta cita**:
+
+- **Silenciosa:** cita o último heartbeat. Enquanto a fonte está calada, ele
+  não muda, então todo ciclo propõe o mesmo alerta e nada se repete. Se a
+  fonte volta e cala de novo, o último heartbeat é outro: alerta novo.
+- **Desatualizada:** cita o **primeiro** heartbeat recebido com a mesma
+  `versao_regras` do último. Se citasse o último, um sensor desatualizado que
+  manda sinal a cada 5 min geraria um alerta MÉDIO a cada 5 min (~288 por
+  dia). Assim sai **um alerta por fonte e versão**; se o sensor troca para
+  outra versão ainda velha, sai outro. Versão ausente conta como uma versão
+  ("desconhecida"). Em formato estranho (número, lista), cita o último.
+
+### Mais de uma instância da API
+
+Cada instância (vários workers do uvicorn, várias réplicas) roda seu próprio
+agendador. **Não há duplicata de alerta**: o dedupe consulta o banco antes de
+gravar e, numa corrida entre instâncias, a restrição única do banco recusa a
+cópia (o mesmo caminho já usado pelo `POST /eventos`). O custo é só trabalho
+repetido: N instâncias fazem N verificações por intervalo. Para muitas
+instâncias, desligue nas extras com `ORBIT_VERIFICACAO_MINUTOS=0` e deixe o
+agendador ligado em uma só. O Docker Compose do projeto sobe uma instância
+com um worker.
+
+### Uso direto
 
 ```python
 from datetime import UTC, datetime
-from app.config import desatualizacao_dias, silencio_horas
-from app.saude_fontes import verificar_saude
+from app.alertas import verificar_saude_e_gravar
+from app.banco import FabricaDeSessao
 
-alertas = verificar_saude(
-    eventos, datetime.now(UTC),
-    limite_silencio_horas=silencio_horas(),
-    limite_desatualizacao_dias=desatualizacao_dias(),
-)
+with FabricaDeSessao() as sessao:
+    novos = verificar_saude_e_gravar(
+        sessao, datetime.now(UTC), limite_silencio_horas=3, limite_desatualizacao_dias=7
+    )
 ```
 
-Devolve `AlertaProposto` (o mesmo tipo do motor de correlação), pronto para
-ser gravado como os outros alertas.
+`agora` vem de fora: os testes passam uma hora fixa, sem relógio nem sleep.
 
 ## Limites conhecidos
 
-- **A regra ainda não roda sozinha.** Nesta parte só existem a função, a
-  configuração e os testes. Nada chama `verificar_saude` periodicamente e os
-  alertas de saúde ainda não são gravados no banco nem aparecem em
-  `GET /alertas`. Isso fica para a próxima parte. Detalhe: uma fonte
-  silenciosa não manda evento, então a verificação não pode depender do
-  `POST /eventos`; precisa de um agendamento.
-- Uma fonte desligada de propósito continua "silenciosa" para sempre: ainda
-  não há como descadastrar uma fonte.
+- **Alertas não se fecham sozinhos.** Uma fonte que volta a falar não
+  "resolve" o alerta de silêncio; ele fica como registro. Ainda não existe
+  estado aberto/resolvido para alertas.
+- O resumo do alerta é escrito na hora em que ele nasce ("sem sinal há 3 h
+  5 min") e não é atualizado depois.
+- Uma fonte desligada de propósito continua "silenciosa" para sempre (um
+  alerta só, mas ele existe): ainda não há como descadastrar uma fonte.
 - Só se vê quem já mandou heartbeat alguma vez; não existe lista de fontes
   esperadas.
 - A versão das regras é só uma data informada pela própria fonte, sem
   verificação.
+- Sem índice por `tipo`: achar os heartbeats percorre a tabela de eventos a
+  cada ciclo. Para bancos grandes, falta um índice (com migração, que o
+  projeto ainda não tem).
+- A busca pela versão usa consulta em JSON (`detalhes->>'versao_regras'`).
+  Testada no SQLite; no PostgreSQL é o operador padrão para o tipo `JSON`,
+  mas ainda sem teste automatizado contra um PostgreSQL real.
+- Configuração lida só na subida; mudar exige reiniciar a API.

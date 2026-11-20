@@ -19,6 +19,11 @@ services:
     environment:
       ORBIT_CHAVE_API: ${ORBIT_CHAVE_API:?defina ORBIT_CHAVE_API no .env}
       ORBIT_BANCO_URL: postgresql+psycopg://orbit:${ORBIT_BANCO_SENHA}@banco:5432/orbit
+      # Opcionais (vazio = padrão do código; veja .env.example):
+      ORBIT_JANELA_HORAS: ${ORBIT_JANELA_HORAS:-}
+      ORBIT_SILENCIO_HORAS: ${ORBIT_SILENCIO_HORAS:-}
+      ORBIT_DESATUALIZACAO_DIAS: ${ORBIT_DESATUALIZACAO_DIAS:-}
+      ORBIT_VERIFICACAO_MINUTOS: ${ORBIT_VERIFICACAO_MINUTOS:-}
     depends_on:
       banco:
         condition: service_healthy

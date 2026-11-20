@@ -4,8 +4,9 @@ Mini-SOC (centro de operações de segurança) próprio: recebe sinais de vária
 fontes de segurança, guarda num formato único, correlaciona sinais do mesmo
 alvo em alertas explicáveis e mostra tudo num painel web de uma tela só.
 
-> **Estado: etapa 4 de 5 em andamento.** Parte 1 pronta: regra de saúde das
-> fontes (heartbeat), ainda sem execução automática. Sem novas fontes nem IA.
+> **Estado: etapa 4 de 5 em andamento.** Saúde das fontes pronta: regra de
+> heartbeat (parte 1) rodando sozinha dentro da API (parte 2). Ainda sem
+> honeypot, scanner de segredos nem IA.
 
 ## Roadmap
 
@@ -13,16 +14,16 @@ alvo em alertas explicáveis e mostra tudo num painel web de uma tela só.
 2. **Motor de correlação e níveis de risco**: regras fixas geram alertas.
 3. **Painel web**: métricas, alertas, linha do tempo e filtros (só leitura).
 4. Novas fontes: saúde das fontes (heartbeat), honeypot defensivo e scanner
-   de segredos. ← aqui (parte 1: saúde das fontes)
+   de segredos. ← aqui (saúde das fontes pronta)
 5. IA que explica (e só sobe o risco), relatórios em PDF e alertas.
 
-## Como funciona (etapa 3)
+## Como funciona
 
 ```
 NetSentinel ─┐                                ┌─> eventos ─┐
 Anzol ───────┼─ POST /eventos (X-API-Key) ─> API            ├─> PostgreSQL
 (futuras) ───┘                                └─> correlação ─> alertas
-                                               ^
+                    agendador (a cada 5 min) ─> saúde das fontes ─┘   ^
      Painel (Streamlit) ── GET /eventos, GET /alertas, GET /alertas/{id}
 ```
 
@@ -36,7 +37,9 @@ Anzol ───────┼─ POST /eventos (X-API-Key) ─> API            
 - **Saúde das fontes:** cada fonte manda eventos `heartbeat`. Sem sinal há
   mais de 3 h (`ORBIT_SILENCIO_HORAS`) vira alerta ALTO; regras com mais de 7
   dias (`ORBIT_DESATUALIZACAO_DIAS`) ou versão desconhecida, MÉDIO. Heartbeats
-  ficam fora da correlação e ocultos no painel por padrão. Detalhes em
+  ficam fora da correlação e ocultos no painel por padrão. A API verifica
+  sozinha a cada 5 min (`ORBIT_VERIFICACAO_MINUTOS`; 0 desliga) e grava os
+  alertas de saúde, que aparecem em `GET /alertas` e no painel. Detalhes em
   [docs/saude_fontes.md](docs/saude_fontes.md).
 
 ## Rodar com Docker
@@ -76,7 +79,8 @@ encontrado.
 
 Envia ~35 eventos **fictícios** (e-mails em `exemplo.com.br`, IPs só das faixas
 reservadas para documentação) que disparam os alertas de exemplo, mais
-heartbeats de três sensores fictícios (um ok, um silencioso, um desatualizado). Pede
+heartbeats de três sensores fictícios (um ok, um silencioso, um desatualizado);
+os alertas de saúde surgem no ciclo seguinte do agendador (até 5 min). Pede
 confirmação antes; não use contra um ORBIT de produção.
 
 ```bash
@@ -121,15 +125,20 @@ ruff check .
   Markdown), porque o resumo pode conter dados de terceiros. A chave nunca
   aparece na tela.
 
-## Limites conhecidos (etapa 4, parte 1)
+## Limites conhecidos (etapa 4)
 
-- **Saúde das fontes ainda não roda sozinha.** `verificar_saude` (em
-  `app/saude_fontes.py`) existe e está testada, mas nada a chama
-  periodicamente: os alertas de saúde ainda não são gravados nem aparecem em
-  `GET /alertas` ou no painel. Precisa de agendamento, porque uma fonte calada
-  não manda evento que dispare a verificação.
+- **Mais de uma instância da API:** cada uma roda seu próprio agendador de
+  saúde. Não duplica alertas (dedupe + restrição única no banco), só repete
+  trabalho; com muitas instâncias, deixe `ORBIT_VERIFICACAO_MINUTOS=0` nas
+  extras.
+- Alertas de saúde não se fecham sozinhos quando a fonte volta (não existe
+  estado aberto/resolvido); limites de saúde só são lidos na subida.
+- Achar heartbeats percorre a tabela de eventos a cada ciclo (sem índice por
+  `tipo`); a consulta em JSON da versão ainda não foi testada num PostgreSQL
+  real (só SQLite).
 - Fonte que nunca mandou heartbeat é invisível para a regra; fonte desligada
-  de propósito fica "silenciosa" para sempre (não há cadastro de fontes).
+  de propósito fica "silenciosa" para sempre (um alerta, mas não há cadastro
+  de fontes).
 - O painel esconde heartbeats depois de receber a resposta da API (que não
   filtra por tipo): com muitos heartbeats, sobram menos eventos reais dentro
   do limite por lista.

@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
+from functools import partial
 
 from fastapi import FastAPI
 
+from app import agendador
 from app.banco import criar_tabelas
-from app.config import janela_horas
+from app.config import desatualizacao_dias, janela_horas, silencio_horas, verificacao_minutos
 from app.rotas import alertas, eventos
 
 
@@ -14,7 +16,14 @@ async def ciclo_de_vida(_: FastAPI):
     # Etapa 1: cria as tabelas na subida. Na etapa de produção, trocar por
     # migrações (Alembic) para evoluir o banco sem perder dados.
     criar_tabelas()
-    yield
+    # Saúde das fontes em segundo plano. Configuração lida uma vez aqui:
+    # valor inválido cai no padrão com UM aviso no log, não um por ciclo.
+    verificar = partial(agendador.verificar_agora, silencio_horas(), desatualizacao_dias())
+    tarefa = agendador.iniciar(verificacao_minutos(), verificar)
+    try:
+        yield
+    finally:
+        await agendador.parar(tarefa)
 
 
 app = FastAPI(

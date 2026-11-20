@@ -214,3 +214,38 @@ def test_dedupe_por_regra_alvo_e_assinatura():
 
 def test_tipo_heartbeat_ignora_maiusculas_e_espacos():
     assert len(verificar_saude([hb(1, 5, tipo=" HeartBeat ")], AGORA)) == 1
+
+
+# --- âncora do alerta de desatualização (evita um alerta por heartbeat) -----------
+
+
+def test_desatualizada_cita_o_primeiro_heartbeat_da_mesma_versao():
+    velha = {"versao_regras": "2026-10-01"}
+    eventos = [
+        hb(1, 3, detalhes={"versao_regras": "2026-09-01"}),  # versão anterior
+        hb(2, 2, detalhes=velha),
+        hb(3, 1, detalhes=velha),
+        hb(4, 0, detalhes=velha),
+    ]
+    alertas = verificar_saude(eventos, AGORA)
+    assert [a.eventos_ids for a in alertas] == [(2,)]
+    # Chegou mais um heartbeat com a mesma versão: o alerta é o mesmo.
+    mais_um = verificar_saude([*eventos, hb(5, 0, detalhes=velha)], AGORA)
+    assert mais_um == alertas
+
+
+def test_versao_nova_ainda_velha_gera_outro_alerta():
+    eventos = [
+        hb(1, 2, detalhes={"versao_regras": "2026-10-01"}),
+        hb(2, 1, detalhes={"versao_regras": "2026-10-15"}),
+    ]
+    assert [a.eventos_ids for a in verificar_saude(eventos, AGORA)] == [(2,)]
+
+
+def test_versao_desconhecida_tambem_cita_o_primeiro_heartbeat_sem_versao():
+    eventos = [hb(1, 2, detalhes={}), hb(2, 1, detalhes={}), hb(3, 0, detalhes=None)]
+    assert [a.eventos_ids for a in verificar_saude(eventos, AGORA)] == [(1,)]
+
+
+def test_silenciosa_cita_o_ultimo_heartbeat():
+    assert [a.eventos_ids for a in verificar_saude([hb(1, 9), hb(2, 5)], AGORA)] == [(2,)]

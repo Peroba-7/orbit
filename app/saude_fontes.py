@@ -123,9 +123,24 @@ def _silenciosa(
     return _alerta(REGRA_SILENCIOSA, NIVEL_SILENCIOSA, alvo, resumo, ultimo)
 
 
+def _versao_bruta(evento: EventoComDetalhes) -> Any:
+    detalhes = evento.detalhes
+    return detalhes.get(CAMPO_VERSAO_REGRAS) if isinstance(detalhes, dict) else None
+
+
+def _chave_tempo(evento: EventoComDetalhes) -> tuple[datetime, int]:
+    return (_utc(evento.ocorrido_em), evento.id)
+
+
 def _desatualizada(
-    ultimo: EventoComDetalhes, origem: str, alvo: str, agora: datetime, limite_dias: float,
+    ultimo: EventoComDetalhes, ancora: EventoComDetalhes, origem: str, alvo: str,
+    agora: datetime, limite_dias: float,
 ) -> AlertaProposto | None:
+    """`ancora` é o heartbeat citado pelo alerta: o mais antigo com a mesma versão.
+
+    Assim um sensor desatualizado que manda heartbeat a cada 5 min gera UM
+    alerta por versão, não um a cada heartbeat (a assinatura não muda).
+    """
     versao = ler_versao_regras(ultimo.detalhes)
     if versao is None:
         resumo = (
@@ -133,7 +148,7 @@ def _desatualizada(
             f"(fonte {origem}): o heartbeat não trouxe '{CAMPO_VERSAO_REGRAS}' "
             "no formato AAAA-MM-DD. Não dá para saber se as regras estão em dia."
         )
-        return _alerta(REGRA_DESATUALIZADA, NIVEL_DESATUALIZADA, alvo, resumo, ultimo)
+        return _alerta(REGRA_DESATUALIZADA, NIVEL_DESATUALIZADA, alvo, resumo, ancora)
 
     idade_dias = (agora.date() - versao).days
     if idade_dias <= limite_dias:  # exatamente no limite ainda está ok
@@ -143,7 +158,7 @@ def _desatualizada(
         f"de {idade_dias} dias atrás (fonte {origem}; limite: "
         f"{_texto_numero(limite_dias)} dias). Ameaças novas podem passar sem detecção."
     )
-    return _alerta(REGRA_DESATUALIZADA, NIVEL_DESATUALIZADA, alvo, resumo, ultimo)
+    return _alerta(REGRA_DESATUALIZADA, NIVEL_DESATUALIZADA, alvo, resumo, ancora)
 
 
 def _alerta(
@@ -171,6 +186,9 @@ def verificar_saude(
     - Desatualizada: heartbeat recente, mas detalhes["versao_regras"] mais
       velha que o limite, ausente ou inválida -> MÉDIO.
     - Exatamente no limite ainda está ok (só passa do limite se for maior).
+    - Quais eventos o alerta cita (e portanto sua assinatura): silenciosa cita
+      o último heartbeat; desatualizada cita o heartbeat MAIS ANTIGO recebido
+      com a mesma versao_regras do último (um alerta por fonte e versão).
 
     `agora` precisa ter fuso (é a referência de tudo). A idade das regras é
     contada em dias de calendário, pela data de `agora` em UTC.
@@ -182,22 +200,24 @@ def verificar_saude(
     agora = agora.astimezone(UTC)
     limite_silencio = timedelta(hours=limite_silencio_horas)
 
-    ultimos: dict[tuple[str, str], EventoComDetalhes] = {}
+    grupos: dict[tuple[str, str], list[EventoComDetalhes]] = {}
     for evento in eventos:
-        if not _e_heartbeat(evento):
-            continue
-        chave = (str(evento.origem), normalizar_alvo(evento.alvo))
-        atual = ultimos.get(chave)
-        if atual is None or (_utc(evento.ocorrido_em), evento.id) > (
-            _utc(atual.ocorrido_em), atual.id
-        ):
-            ultimos[chave] = evento
+        if _e_heartbeat(evento):
+            chave = (str(evento.origem), normalizar_alvo(evento.alvo))
+            grupos.setdefault(chave, []).append(evento)
 
     alertas: dict[tuple[str, str, str], AlertaProposto] = {}
-    for (origem, alvo), ultimo in sorted(ultimos.items()):
+    for (origem, alvo), do_grupo in sorted(grupos.items()):
+        ultimo = max(do_grupo, key=_chave_tempo)
         alerta = _silenciosa(ultimo, origem, alvo, agora, limite_silencio, limite_silencio_horas)
         if alerta is None:
-            alerta = _desatualizada(ultimo, origem, alvo, agora, limite_desatualizacao_dias)
+            versao = _versao_bruta(ultimo)
+            ancora = min(
+                (e for e in do_grupo if _versao_bruta(e) == versao), key=_chave_tempo
+            )
+            alerta = _desatualizada(
+                ultimo, ancora, origem, alvo, agora, limite_desatualizacao_dias
+            )
         if alerta is not None:
             chave_alerta = (alerta.regra, alerta.alvo, assinatura(alerta.eventos_ids))
             alertas.setdefault(chave_alerta, alerta)
