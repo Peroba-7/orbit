@@ -8,6 +8,8 @@ COPY requirements-painel.txt .
 RUN pip install --no-cache-dir -r requirements-painel.txt
 
 COPY painel ./painel
+# Tema (escuro) do Streamlit: lido de .streamlit/ no diretório de trabalho.
+COPY .streamlit ./.streamlit
 
 # Não roda como root dentro do contêiner.
 RUN useradd --create-home orbit

@@ -1,6 +1,8 @@
 """Testes das funções puras do painel (sem Streamlit, sem rede)."""
 
+import tomllib
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -175,3 +177,55 @@ def test_cada_nivel_tem_cor(nivel):
 def test_nivel_desconhecido_nao_ganha_estilo():
     assert dados.estilo_nivel("<b>x</b>") == ""
     assert dados.estilo_nivel(None) == ""
+
+
+# --- tema: cores consistentes e com contraste ------------------------------------------
+
+TEMA = tomllib.loads(
+    (Path(__file__).resolve().parents[1] / ".streamlit" / "config.toml").read_text("utf-8")
+)["theme"]
+
+
+def _luminancia(cor: str) -> float:
+    canais = [int(cor[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in canais]
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+
+def contraste(a: str, b: str) -> float:
+    claro, escuro = sorted((_luminancia(a), _luminancia(b)), reverse=True)
+    return (claro + 0.05) / (escuro + 0.05)
+
+
+def test_tema_e_escuro():
+    assert TEMA["base"] == "dark"
+    assert contraste(TEMA["textColor"], TEMA["backgroundColor"]) >= 7
+    assert contraste("#ffffff", TEMA["primaryColor"]) >= 4.5  # texto dos botões
+
+
+@pytest.mark.parametrize("nivel", dados.NIVEIS)
+def test_celula_de_nivel_tem_contraste_aa(nivel):
+    fundo, texto = dados.CORES_NIVEL[nivel]
+    assert contraste(fundo, texto) >= 4.5
+
+
+def test_escala_de_nivel_e_a_mesma_em_tabela_e_badge():
+    assert dados.BADGE_NIVEL == {
+        "CRÍTICO": "red", "ALTO": "orange", "MÉDIO": "yellow", "BAIXO": "green",
+    }
+    assert set(dados.CORES_NIVEL) == set(dados.BADGE_NIVEL) == set(dados.NIVEIS)
+
+
+def test_cores_de_origem_cobrem_todas_e_aparecem_no_fundo_escuro():
+    assert list(dados.CORES_ORIGEM) == dados.ORIGENS
+    assert TEMA["chartCategoricalColors"] == list(dados.CORES_ORIGEM.values())
+    for cor in dados.CORES_ORIGEM.values():
+        assert contraste(cor, TEMA["backgroundColor"]) >= 3  # marcas gráficas: 3:1
+
+
+def test_contagem_por_nivel_do_mais_grave_ao_mais_leve():
+    alertas = [alerta(1, "ALTO", None), alerta(2, "CRÍTICO", None),
+               alerta(3, "ALTO", None), alerta(4, "???", None)]
+    assert dados.contagem_por_nivel(alertas) == [
+        ("CRÍTICO", 1), ("ALTO", 2), ("MÉDIO", 0), ("BAIXO", 0),
+    ]

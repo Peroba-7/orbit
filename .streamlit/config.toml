@@ -1,0 +1,39 @@
+# Tema do painel do ORBIT: escuro, com destaque roxo e ciano.
+# Fonte embutida no Streamlit (sem Google Fonts): o painel não faz consulta
+# externa. As cores de nível e de origem ficam em painel/dados.py; a lista
+# chartCategoricalColors abaixo repete CORES_ORIGEM (um teste garante isso).
+
+[theme]
+base = "dark"
+primaryColor = "#7c3aed"            # roxo vivo; texto branco nos botões passa de 4.5:1
+linkColor = "#a78bfa"
+backgroundColor = "#0b1020"
+secondaryBackgroundColor = "#141b2d"
+textColor = "#e6e9f2"
+borderColor = "#2a3350"
+font = "sans-serif"
+baseRadius = "10px"
+headingFontWeights = [800, 700, 700, 600, 600, 600]
+metricValueFontSize = "2.25rem"
+metricValueFontWeight = 700
+
+# Mesma escala de nível em badges, tabelas e textos coloridos.
+redColor = "#ef4444"
+orangeColor = "#f97316"
+yellowColor = "#eab308"
+greenColor = "#22c55e"
+blueColor = "#60a5fa"
+violetColor = "#a78bfa"
+
+dataframeHeaderBackgroundColor = "#1b2440"
+dataframeHeaderTextColor = "#e6e9f2"
+dataframeBorderColor = "#2a3350"
+
+# Cores por origem (netsentinel, anzol, honeypot, scanner_segredos, logs).
+chartCategoricalColors = ["#22d3ee", "#a78bfa", "#f472b6", "#60a5fa", "#94a3b8"]
+
+[theme.sidebar]
+backgroundColor = "#0f1528"
+secondaryBackgroundColor = "#1b2440"
+textColor = "#e6e9f2"
+borderColor = "#2a3350"

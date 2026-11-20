@@ -89,7 +89,7 @@ python scripts/popular_demo.py
 ```
 ## Painel
 
-![Painel do ORBIT: alertas correlacionados e os eventos que os causaram](docs/painel-alertas.jpeg)
+![Painel do ORBIT: alertas correlacionados e os eventos que os causaram](docs/painel-escuro.jpeg)
 
 *Dados de demonstração fictícios, gerados por `scripts/popular_demo.py`.*
 

@@ -8,6 +8,10 @@ mexe nas regras. Rodar a partir da raiz do repositório:
 Segurança: todo texto vindo da API (resumo, alvo, tipo...) é exibido como
 TEXTO, só com st.dataframe e st.text, que não interpretam HTML nem Markdown.
 O campo resumo pode conter dados de terceiros (ex.: assunto de e-mail).
+
+Visual: tema escuro em .streamlit/config.toml. O único HTML da página é o CSS
+fixo de ESTILO_FIXO (escrito aqui, nunca com dado da API dentro). Badges só
+recebem textos nossos: os 4 nomes de nível conhecidos e contagens.
 """
 
 from typing import Any
@@ -53,6 +57,43 @@ COLUNA_ID = {"id": st.column_config.NumberColumn("id", width="small", format="%d
 COLUNA_RESUMO = {"Resumo": st.column_config.TextColumn("Resumo", width="large")}
 CONFIG_COLUNAS = {**COLUNAS_DATA, **COLUNA_ID, **COLUNA_RESUMO}
 
+# Cartões de métrica: (chave do container, rótulo, chave em dados.metricas, ícone).
+# A cor da borda de cada um está em ESTILO_FIXO (críticos em vermelho).
+CARTOES = [
+    ("metrica_eventos", "Eventos", "eventos", ":material/sensors:"),
+    ("metrica_alertas", "Alertas", "alertas", ":material/notifications_active:"),
+    ("metrica_criticos", "Alertas críticos", "alertas_criticos", ":material/crisis_alert:"),
+    ("metrica_alvos", "Alvos distintos", "alvos_distintos", ":material/my_location:"),
+]
+
+# CSS FIXO. Não interpole nada aqui: é a única string passada com
+# unsafe_allow_html, e por isso nunca pode conter dado vindo da API.
+# Só mira containers com `key` criados por nós (classe .st-key-<key>).
+ESTILO_FIXO = """
+<style>
+.st-key-cabecalho h1, .st-key-cabecalho h1 * {
+  background: linear-gradient(90deg, #22d3ee 0%, #a78bfa 55%, #f472b6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: 0.12em;
+  font-size: 3.25rem;
+  line-height: 1.1;
+}
+.st-key-metrica_eventos, .st-key-metrica_alertas,
+.st-key-metrica_criticos, .st-key-metrica_alvos {
+  background: #141b2d;
+  border: 1px solid #2a3350;
+  border-left: 5px solid #22d3ee;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+}
+.st-key-metrica_alertas { border-left-color: #a78bfa; }
+.st-key-metrica_criticos { border-left-color: #ef4444; border-color: #7f1d1d; }
+.st-key-metrica_alvos { border-left-color: #60a5fa; }
+</style>
+"""
+
 
 # --- Barra lateral: filtros ----------------------------------------------------------
 
@@ -83,10 +124,18 @@ with st.sidebar:
 filtros = {"origem": origem, "nivel_minimo": nivel_minimo, "alvo": alvo}
 
 
-# --- Dados -----------------------------------------------------------------------------
+# --- Cabeçalho ---------------------------------------------------------------------------
 
-st.title("ORBIT", anchor=False)
-st.caption("Eventos e alertas de segurança correlacionados por alvo.")
+st.markdown(ESTILO_FIXO, unsafe_allow_html=True)  # só CSS fixo, nenhum dado
+
+with st.container(key="cabecalho"):
+    st.title("ORBIT", anchor=False)
+    st.caption(
+        "Mini-SOC · eventos e alertas de segurança correlacionados por alvo · somente leitura"
+    )
+
+
+# --- Dados -----------------------------------------------------------------------------
 
 try:
     eventos = carregar_lista("eventos", dados.parametros(**filtros, limite=limite))
@@ -108,10 +157,9 @@ alertas = dados.filtrar(alertas, **filtros)
 
 numeros = dados.metricas(eventos, alertas)
 with st.container(horizontal=True):
-    st.metric("Eventos", numeros["eventos"], border=True)
-    st.metric("Alertas", numeros["alertas"], border=True)
-    st.metric("Alertas críticos", numeros["alertas_criticos"], border=True)
-    st.metric("Alvos distintos", numeros["alvos_distintos"], border=True)
+    for chave, rotulo, campo, icone in CARTOES:
+        with st.container(key=chave):
+            st.metric(rotulo, numeros[campo], icon=icone)
 st.caption(
     f"Contagens sobre o que foi carregado com os filtros (até {limite} por lista)."
     + ("" if mostrar_heartbeats else " Heartbeats ocultos.")
@@ -121,6 +169,10 @@ st.caption(
 # --- Alertas -----------------------------------------------------------------------------
 
 st.subheader("Alertas", anchor=False)
+with st.container(horizontal=True, key="badges_niveis"):
+    # Rótulo = nome de nível da lista fixa + número: nada vindo da API.
+    for nivel, quantidade in dados.contagem_por_nivel(alertas):
+        st.badge(f"{nivel} · {quantidade}", color=dados.BADGE_NIVEL[nivel])
 if not alertas:
     st.info("Nenhum alerta com esses filtros.", icon=":material/check_circle:")
 else:
@@ -145,6 +197,10 @@ else:
             except ErroDaApi as erro:
                 st.error(str(erro), title="Não foi possível abrir o alerta")
             else:
+                nivel = detalhe.get("nivel")
+                if nivel in dados.BADGE_NIVEL:
+                    # Só um dos 4 nomes fixos vira badge (Markdown); outro valor, não.
+                    st.badge(nivel, color=dados.BADGE_NIVEL[nivel])
                 st.text(
                     f"Alerta #{detalhe.get('id')} · {detalhe.get('nivel')} · "
                     f"regra {detalhe.get('regra')} · alvo {detalhe.get('alvo')}"
@@ -169,11 +225,19 @@ else:
     if not por_hora.empty:
         grafico = (
             alt.Chart(por_hora)
-            .mark_bar()
+            .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
             .encode(
                 x=alt.X("hora:T", timeUnit="utcyearmonthdatehours", title="Hora (UTC)"),
                 y=alt.Y("eventos:Q", stack=True, title="Eventos"),
-                color=alt.Color("origem:N", title="Origem"),
+                color=alt.Color(
+                    "origem:N",
+                    title="Origem",
+                    # Cor fixa por origem: a mesma em qualquer filtro.
+                    scale=alt.Scale(
+                        domain=list(dados.CORES_ORIGEM),
+                        range=list(dados.CORES_ORIGEM.values()),
+                    ),
+                ),
                 tooltip=[
                     alt.Tooltip("hora:T", timeUnit="utcyearmonthdatehours", title="Hora (UTC)"),
                     alt.Tooltip("origem:N", title="Origem"),

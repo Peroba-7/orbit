@@ -18,12 +18,27 @@ LIMITE_MAXIMO = 200
 # então fica oculto por padrão para não poluir métricas e linha do tempo.
 TIPO_HEARTBEAT = "heartbeat"
 
-# Cores de fundo/texto de cada nível na tabela (contraste legível nos dois temas).
+# Escala de cor dos níveis, a mesma em tabela, badge e gráfico:
+# CRÍTICO vermelho, ALTO laranja, MÉDIO amarelo, BAIXO verde. O nome do nível
+# continua sempre escrito: a cor reforça, não substitui (daltonismo).
+# Fundo/texto da célula na tabela, com contraste mínimo de 4.5:1 (WCAG AA).
 CORES_NIVEL = {
-    "BAIXO": ("#d1e7dd", "#0f5132"),
-    "MÉDIO": ("#fff3cd", "#664d03"),
-    "ALTO": ("#ffe5d0", "#842029"),
-    "CRÍTICO": ("#dc3545", "#ffffff"),
+    "BAIXO": ("#22c55e", "#052e16"),
+    "MÉDIO": ("#facc15", "#1a1400"),
+    "ALTO": ("#f97316", "#1c0a00"),
+    "CRÍTICO": ("#dc2626", "#ffffff"),
+}
+# Nome da cor de st.badge para cada nível (tons definidos em .streamlit/config.toml).
+BADGE_NIVEL = {"BAIXO": "green", "MÉDIO": "yellow", "ALTO": "orange", "CRÍTICO": "red"}
+
+# Cor fixa por origem no gráfico. Fora da escala dos níveis (sem vermelho,
+# laranja, amarelo ou verde) para não confundir origem com gravidade.
+CORES_ORIGEM = {
+    "netsentinel": "#22d3ee",
+    "anzol": "#a78bfa",
+    "honeypot": "#f472b6",
+    "scanner_segredos": "#60a5fa",
+    "logs": "#94a3b8",
 }
 
 Registro = dict[str, Any]
@@ -207,6 +222,12 @@ def linhas_eventos(eventos: Iterable[Registro]) -> list[Registro]:
         }
         for e in ordenar_eventos(eventos)
     ]
+
+
+def contagem_por_nivel(alertas: Iterable[Registro]) -> list[tuple[str, int]]:
+    """Quantos alertas de cada nível, do mais grave ao mais leve (só os 4 conhecidos)."""
+    contagem = Counter(a.get("nivel") for a in alertas)
+    return [(nivel, contagem[nivel]) for nivel in reversed(NIVEIS)]
 
 
 def estilo_nivel(nivel: Any) -> str:
